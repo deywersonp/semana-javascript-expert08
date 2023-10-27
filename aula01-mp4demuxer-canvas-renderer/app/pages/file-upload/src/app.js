@@ -4,9 +4,19 @@ import View from './view.js';
 const view = new View()
 const clock = new Clock()
 
+const worker = new Worker('./src/worker/worker.js', {
+    type: 'module'
+})
+
+worker.onmessage = ({ data }) => {
+    console.log('recebido na view', data)
+}
+
 let took = ''
 
 view.configureOnFileChange(file => {
+    worker.postMessage('enviado do pai!')
+
     clock.start((time) => {
         took = time;
         view.updateElapsedTime(`Process started ${time}`)

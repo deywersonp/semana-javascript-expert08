@@ -1,4 +1,7 @@
 onmessage = ({ data }) => {
-  console.log('recebido!!', data)
-  self.postMessage('hey from work')
+  setTimeout(() => {
+    self.postMessage({
+      status: 'done'
+    })
+  }, 2000)
 }

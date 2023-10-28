@@ -1,6 +1,7 @@
 export default class VideoProcessor {
   #mp4Demuxer
   #webMWritter
+  #buffers = []
 
   //We are receiving the mp4Demuxer using dependency injection
   //The injection is made by the worker.js file
@@ -188,18 +189,42 @@ export default class VideoProcessor {
     }
   }
 
-  async start({ file, encoderConfig, renderFrame }) {
+  async start({ file, encoderConfig, renderFrame, sendMessage }) {
     const stream = file.stream()
-    const fileName = file.name.split('/').pop().replace('.mp4', '')
+    const filename = file.name.split('/').pop().replace('.mp4', '')
     await this.mp4Decoder(stream)
       .pipeThrough(this.encode144p(encoderConfig))
       //The second pipe receive the frame encoded to 144p and the decoder config
       //With this 2 datas we can decoder the frame to render on the canvas element
       .pipeThrough(this.renderDecodedFramesAndGetEncodedChunks(renderFrame))
       .pipeThrough(this.transformIntoWebM())
+      //This step is just for debugger purposes and is not recommended for production.
+      //The main reason is because the file size can be very large and will make 
+      //a big memory occupation
+      .pipeThrough(
+        new TransformStream({
+          transform: ({ data, position }, controller) => {
+            this.#buffers.push(data)
+            controller.enqueue(data)
+          },
+          //Flush is called when the process completes
+          flush: () => {
+            //To download file works we have to send the buffers and filename
+            // sendMessage({
+            //   status: 'done',
+            //   buffers: this.#buffers,
+            //   filename: filename.concat('-144p.webm')
+            // })
+
+            sendMessage({
+              status: 'done',
+            })
+          }
+        })
+      )
       .pipeTo(new WritableStream({
         write(frame) {
-          debugger
+          // debugger
         }
       }))
   }

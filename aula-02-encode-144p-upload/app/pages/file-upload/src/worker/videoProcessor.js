@@ -65,13 +65,81 @@ export default class VideoProcessor {
     })
   }
 
+  encode144p(encoderConfig) {
+    let _encoder
+
+    //The same result as mp4Decoder, but with a different approach
+    //Here is where the data will be accessed
+    //Used to create a data source; We can use this to pipe to another place
+    const readable = new ReadableStream({
+      start: async (controller) => {
+        const { supported } = await VideoEncoder.isConfigSupported(encoderConfig)
+
+        //Other way to handler the supported error is using controller.error
+        if (!supported) {
+          const message = ('encode144p VideoEncoder config is not supported!')
+          console.error(message, encoderConfig)
+          controller.error(message)
+          return
+        }
+
+        _encoder = new VideoEncoder({
+          /**
+           * 
+           * @param {EncodedVideoChunk} frame 
+           * @param {EncodedVideoChunkMetadata} config 
+           */
+          output: (frame, config) => {
+            //We'll pass the decoder config forward cause we need to decoder the video
+            //to render the frames on canvas element
+            if (config.decoderConfig) {
+              const decoderConfig = {
+                type: 'config',
+                config: config.decoderConfig
+              }
+
+              controller.enqueue(decoderConfig)
+            }
+
+            controller.enqueue(frame)
+          },
+          error: (err) => {
+            console.error('VideoEncoder 144p', err)
+            controller.error(err)
+          }
+        })
+
+        await _encoder.configure(encoderConfig)
+      }
+    })
+
+    //Here is where the data are received and written
+    const writable = new WritableStream({
+      async write(frame) {
+        //When each frame from encode is ready, the data will be moved to the output inside the readable
+        _encoder.encode(frame)
+        frame.close()
+      }
+    })
+
+    //Returning readable and writable config a duplex: A channel where we can 
+    //listen data and a channel where we can write data
+    return {
+      readable,
+      writable
+    }
+  }
+
   async start({ file, encoderConfig, renderFrame }) {
     const stream = file.stream()
     const fileName = file.name.split('/').pop().replace('.mp4', '')
     await this.mp4Decoder(stream)
+      .pipeThrough(this.encode144p(encoderConfig))
+      //The second pipe receive the frame encoded to 144p and the decoder config
+      //With this 2 datas we can decoder the frame to render on the canvas element
       .pipeTo(new WritableStream({
         write(frame) {
-          renderFrame(frame)
+          debugger
         }
       }))
   }

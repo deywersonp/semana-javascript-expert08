@@ -15,7 +15,7 @@ export default class VideoProcessor {
   /**
  * @returns {ReadableStream}
  * */
-  mp4Decoder(encoderConfig, stream) {
+  mp4Decoder(stream) {
     return new ReadableStream({
       //Who consumes this function will receive what the controller sends
       start: async (controller) => {
@@ -36,7 +36,15 @@ export default class VideoProcessor {
 
         return this.#mp4Demuxer.run(stream,
           {
-            onConfig(config) {
+            async onConfig(config) {
+              const { supported } = await VideoDecoder.isConfigSupported(config)
+
+              if (!supported) {
+                console.error('mp4Muxer VideoDecoder config is not supported!', config)
+                controller.close()
+                return
+              }
+
               decoder.configure(config)
             },
             /**
@@ -51,7 +59,7 @@ export default class VideoProcessor {
         ).then(() => {
           setTimeout(() => {
             controller.close()
-          }, 1000)
+          }, 3000)
         })
       }
     })
@@ -60,7 +68,7 @@ export default class VideoProcessor {
   async start({ file, encoderConfig, renderFrame }) {
     const stream = file.stream()
     const fileName = file.name.split('/').pop().replace('.mp4', '')
-    await this.mp4Decoder(encoderConfig, stream)
+    await this.mp4Decoder(stream)
       .pipeTo(new WritableStream({
         write(frame) {
           renderFrame(frame)

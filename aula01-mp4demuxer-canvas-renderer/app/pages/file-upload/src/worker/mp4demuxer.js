@@ -47,7 +47,16 @@ export default class MP4Demuxer {
 
   //By default the mp4Box process 1000 frames per second
   #onSamples(trackId, ref, samples) {
-    debugger
+    //Generate and emit an EncodedVideoChunk for each demuxed sample
+    for (const sample of samples) {
+      this.#onChunk(new EncodedVideoChunk({
+        //Define frame type
+        type: sample.is_sync ? "key" : "delta",
+        timestamp: 1e6 * sample.cts / sample.timescale,
+        duration: 1e6 * sample.duration / sample.timescale,
+        data: sample.data
+      }))
+    }
   }
 
   #onReady(info) {

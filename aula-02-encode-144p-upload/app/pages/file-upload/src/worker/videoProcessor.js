@@ -274,5 +274,7 @@ export default class VideoProcessor {
       //   }
       // }))
       .pipeTo(this.upload(filename, '144p', 'webm'))
+
+    sendMessage({ status: 'done' })
   }
 }

@@ -1,19 +1,21 @@
 export default class VideoProcessor {
   #mp4Demuxer
-  #webMWritter
+  #webMWriter
+  #service
   #buffers = []
-
   //We are receiving the mp4Demuxer using dependency injection
   //The injection is made by the worker.js file
   /**
    * 
    * @param {object} options
    * @param {import('./mp4demuxer.js').default} options.mp4Demuxer
-   * @param {import('../deps/webm-writer2.js').default} options.webMWritter
+   * @param {import('./../deps/webm-writer2.js').default} options.webMWriter
+   * @param {import('./service.js').default} options.service
    */
-  constructor({ mp4Demuxer, webMWritter }) {
+  constructor({ mp4Demuxer, webMWriter, service }) {
     this.#mp4Demuxer = mp4Demuxer
-    this.#webMWritter = webMWritter
+    this.#webMWriter = webMWriter
+    this.#service = service
   }
 
   /**
@@ -82,7 +84,7 @@ export default class VideoProcessor {
 
         //Other way to handler the supported error is using controller.error
         if (!supported) {
-          const message = ('encode144p VideoEncoder config is not supported!')
+          const message = 'encode144p VideoEncoder config not supported!'
           console.error(message, encoderConfig)
           controller.error(message)
           return
@@ -176,17 +178,61 @@ export default class VideoProcessor {
   transformIntoWebM() {
     const writable = new WritableStream({
       write: (chunk) => {
-        this.#webMWritter.addFrame(chunk)
+        this.#webMWriter.addFrame(chunk)
       },
       close() {
         debugger
       }
     })
-
     return {
-      readable: this.#webMWritter.getStream(),
+      readable: this.#webMWriter.getStream(),
       writable
     }
+  }
+  //The UPLOAD will be the last process, so, for the last process, we have to return an writable
+  upload(filename, resolution, type) {
+    const chunks = []
+    let byteCount = 0
+    let segmentCount = 0
+
+    const triggerUpload = async chunks => {
+      const blob = new Blob(
+        chunks,
+        { type: 'video/webm' }
+      )
+
+      await this.#service.uploadFile({
+        filename: `${filename}-${resolution}.${++segmentCount}.${type}`,
+        fileBuffer: blob
+      })
+
+      //Clean all elements
+      chunks.length = 0
+      byteCount = 0
+    }
+
+    return new WritableStream({
+      /**
+       * 
+       * @param {object} options
+       * @param {Uint8Array} options.data
+       */
+      async write({ data }) {
+        chunks.push(data)
+        byteCount += data.byteLength
+
+        //If byteCount smaller than 10MB do not UPLOAD
+        if (byteCount <= 10e6) return
+        await triggerUpload(chunks)
+      },
+      async close() {
+        //If stream completed, OK
+        if (!chunks.length) return;
+        //If the file size is smaller than 10MB and the stream are ready to close
+        //We do the UPLOAD
+        await triggerUpload(chunks)
+      }
+    })
   }
 
   async start({ file, encoderConfig, renderFrame, sendMessage }) {
@@ -198,34 +244,35 @@ export default class VideoProcessor {
       //With this 2 datas we can decoder the frame to render on the canvas element
       .pipeThrough(this.renderDecodedFramesAndGetEncodedChunks(renderFrame))
       .pipeThrough(this.transformIntoWebM())
-      //This step is just for debugger purposes and is not recommended for production.
-      //The main reason is because the file size can be very large and will make 
-      //a big memory occupation
-      .pipeThrough(
-        new TransformStream({
-          transform: ({ data, position }, controller) => {
-            this.#buffers.push(data)
-            controller.enqueue(data)
-          },
-          //Flush is called when the process completes
-          flush: () => {
-            //To download file works we have to send the buffers and filename
-            // sendMessage({
-            //   status: 'done',
-            //   buffers: this.#buffers,
-            //   filename: filename.concat('-144p.webm')
-            // })
+      // //This step is just for debugger purposes and is not recommended for production.
+      // //The main reason is because the file size can be very large and will make 
+      // //a big memory occupation
+      // .pipeThrough(
+      //   new TransformStream({
+      //     transform: ({ data, position }, controller) => {
+      //       this.#buffers.push(data)
+      //       controller.enqueue(data)
+      //     },
+      //     //Flush is called when the process completes
+      //     flush: () => {
+      //       //To download file works we have to send the buffers and filename
+      //       // sendMessage({
+      //       //   status: 'done',
+      //       //   buffers: this.#buffers,
+      //       //   filename: filename.concat('-144p.webm')
+      //       // })
 
-            sendMessage({
-              status: 'done',
-            })
-          }
-        })
-      )
-      .pipeTo(new WritableStream({
-        write(frame) {
-          // debugger
-        }
-      }))
+      //       sendMessage({
+      //         status: 'done',
+      //       })
+      //     }
+      //   })
+      // )
+      // .pipeTo(new WritableStream({
+      //   write(frame) {
+      //     // debugger
+      //   }
+      // }))
+      .pipeTo(this.upload(filename, '144p', 'webm'))
   }
 }

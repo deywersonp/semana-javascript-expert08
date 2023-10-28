@@ -43,13 +43,16 @@ export default class VideoProcessor {
         return this.#mp4Demuxer.run(stream,
           {
             async onConfig(config) {
-              const { supported } = await VideoDecoder.isConfigSupported(config)
+              //Something in this suport validation is triggering a silent error
+              //that dont demuxer files with bigger size. Because of that we commented
+              //this code
+              // const { supported } = await VideoDecoder.isConfigSupported(config)
 
-              if (!supported) {
-                console.error('mp4Muxer VideoDecoder config is not supported!', config)
-                controller.close()
-                return
-              }
+              // if (!supported) {
+              //   console.error('mp4Muxer VideoDecoder config is not supported!', config)
+              //   controller.close()
+              //   return
+              // }
 
               decoder.configure(config)
             },

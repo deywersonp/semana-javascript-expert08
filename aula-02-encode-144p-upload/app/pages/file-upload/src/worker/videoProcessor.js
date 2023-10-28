@@ -56,11 +56,12 @@ export default class VideoProcessor {
               decoder.decode(chunk)
             }
           }
-        ).then(() => {
-          setTimeout(() => {
-            controller.close()
-          }, 3000)
-        })
+        )
+        // .then(() => {
+        //   setTimeout(() => {
+        //     controller.close()
+        //   }, 3000)
+        // })
       }
     })
   }
@@ -130,6 +131,44 @@ export default class VideoProcessor {
     }
   }
 
+  renderDecodedFramesAndGetEncodedChunks(renderFrame) {
+    let _decoder
+    //TransformStream is a writable AND readable stream. The difference from the example 
+    //above is that we create manually a TransformStream, and now we are using the constructor
+    return new TransformStream({
+      start: (controller) => {
+        _decoder = new VideoDecoder({
+          output(frame) {
+            renderFrame(frame)
+          },
+          error(e) {
+            console.error('error at renderFrames', e)
+            controller.error(e)
+          }
+        })
+      },
+      //On TransformStream we have the transform method. Each frame will drop here
+      //This transform function will be hit twice by frame, one with the config and other with
+      //the real frame
+      /**
+       * 
+       * @param {EncodedVideoChunk} encodedChunk 
+       * @param {TransformStreamDefaultController} controller 
+       */
+      async transform(encodedChunk, controller) {
+        if (encodedChunk.type === 'config') {
+          await _decoder.configure(encodedChunk.config)
+          return
+        }
+
+        _decoder.decode(encodedChunk)
+
+        //need the encoded version to use webM
+        controller.enqueue(encodedChunk)
+      }
+    })
+  }
+
   async start({ file, encoderConfig, renderFrame }) {
     const stream = file.stream()
     const fileName = file.name.split('/').pop().replace('.mp4', '')
@@ -137,9 +176,10 @@ export default class VideoProcessor {
       .pipeThrough(this.encode144p(encoderConfig))
       //The second pipe receive the frame encoded to 144p and the decoder config
       //With this 2 datas we can decoder the frame to render on the canvas element
+      .pipeThrough(this.renderDecodedFramesAndGetEncodedChunks(renderFrame))
       .pipeTo(new WritableStream({
         write(frame) {
-          debugger
+          // debugger
         }
       }))
   }

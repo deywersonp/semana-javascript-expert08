@@ -1,6 +1,8 @@
 import CanvasRenderer from "./canvasRenderer.js"
 import MP4Demuxer from "./mp4demuxer.js"
 import VideoProcessor from "./videoProcessor.js"
+import WebMWritter from "../deps/webm-writer2.js"
+
 //This constraints are the video resolution
 //144p
 const qvgaConstraints = {
@@ -35,9 +37,18 @@ const encoderConfig = {
   // avc: { format: 'annexb' },
 }
 
+const webMWritterConfig = {
+  //This codec value is required to work with webM
+  codec: 'VP9',
+  width: encoderConfig.width,
+  height: encoderConfig.height,
+  bitrate: encoderConfig.bitrate,
+}
+
 const mp4Demuxer = new MP4Demuxer()
 const videoProcessor = new VideoProcessor({
-  mp4Demuxer
+  mp4Demuxer,
+  webMWritter: new WebMWritter(webMWritterConfig)
 })
 
 onmessage = async ({ data }) => {

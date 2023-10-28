@@ -1,5 +1,6 @@
 export default class VideoProcessor {
   #mp4Demuxer
+  #webMWritter
 
   //We are receiving the mp4Demuxer using dependency injection
   //The injection is made by the worker.js file
@@ -7,9 +8,11 @@ export default class VideoProcessor {
    * 
    * @param {object} options
    * @param {import('./mp4demuxer.js').default} options.mp4Demuxer
+   * @param {import('../deps/webm-writer2.js').default} options.webMWritter
    */
-  constructor({ mp4Demuxer }) {
+  constructor({ mp4Demuxer, webMWritter }) {
     this.#mp4Demuxer = mp4Demuxer
+    this.#webMWritter = webMWritter
   }
 
   /**
@@ -169,6 +172,22 @@ export default class VideoProcessor {
     })
   }
 
+  transformIntoWebM() {
+    const writable = new WritableStream({
+      write: (chunk) => {
+        this.#webMWritter.addFrame(chunk)
+      },
+      close() {
+        debugger
+      }
+    })
+
+    return {
+      readable: this.#webMWritter.getStream(),
+      writable
+    }
+  }
+
   async start({ file, encoderConfig, renderFrame }) {
     const stream = file.stream()
     const fileName = file.name.split('/').pop().replace('.mp4', '')
@@ -177,9 +196,10 @@ export default class VideoProcessor {
       //The second pipe receive the frame encoded to 144p and the decoder config
       //With this 2 datas we can decoder the frame to render on the canvas element
       .pipeThrough(this.renderDecodedFramesAndGetEncodedChunks(renderFrame))
+      .pipeThrough(this.transformIntoWebM())
       .pipeTo(new WritableStream({
         write(frame) {
-          // debugger
+          debugger
         }
       }))
   }

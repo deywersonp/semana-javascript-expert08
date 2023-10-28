@@ -21,9 +21,17 @@ worker.onmessage = ({ data }) => {
 let took = ''
 
 view.configureOnFileChange(file => {
+    const canvas = view.getCanvas()
+
     worker.postMessage({
-        file
-    })
+        file,
+        canvas,
+        //Required inform that this subprocess will be a transferable from the main
+        //process to the secondary process. Doing this we can update the view from
+        //the secondary process. Work for only few elements
+    }, [
+        canvas
+    ])
 
     clock.start((time) => {
         took = time;
